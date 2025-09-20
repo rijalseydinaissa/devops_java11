@@ -9,7 +9,6 @@ pipeline {
     environment {
         DOCKER_IMAGE = "demo-springboot"
         DOCKERHUB_REPO = "issadiol/demo-springboot" // ton repo DockerHub
-        RENDER_DEPLOY_HOOK = credentials('render-deploy-hook') // secret côté Jenkins
         RENDER_DEPLOY_HOOK = "https://api.render.com/deploy/srv-d378rfmr433s73ehe220?key=aJVRFosBwPE" // ton deploy hook
     }
 
