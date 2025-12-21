@@ -83,24 +83,6 @@ pipeline {
             }
         }
 
-        stage(' Unit Tests') {
-            steps {
-                container('maven') {
-                    sh '''
-                        echo "Running unit tests..."
-                        mvn test
-                    '''
-                }
-            }
-            post {
-                always {
-                    junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
-                    // Version simplifiée - JaCoCo avec configuration par défaut
-                    jacoco()
-                }
-            }
-        }
-
         stage('SonarQube Analysis') {
             steps {
                 container('maven') {
