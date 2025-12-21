@@ -18,9 +18,9 @@ pipeline {
         GIT_CREDENTIALS = credentials('git-credentials')
 
         // URLs
-        SONAR_HOST_URL = "http://your-sonarqube-url:9000"
-        GIT_MANIFESTS_REPO = "https://github.com/votre-username/k8s-manifests.git"
-        GIT_SOURCE_REPO = "https://github.com/votre-username/spring-boot-app.git"
+        SONAR_HOST_URL = "http://localhost:7000/"
+        GIT_MANIFESTS_REPO = "https://github.com/rijalseydinaissa/k8s-manifests.gitt"
+        GIT_SOURCE_REPO = "https://github.com/rijalseydinaissa/deploy_java_version11.git"
 
         // Namespaces K8s
         K8S_NAMESPACE = "production"
@@ -34,7 +34,7 @@ pipeline {
     }
 
     stages {
-        stage('🔍 Environment Info') {
+        stage(' Environment Info') {
             steps {
                 container('maven') {
                     sh '''
@@ -47,7 +47,7 @@ pipeline {
                         echo "Workspace: ${WORKSPACE}"
                         echo ""
                         echo "====================================="
-                        echo "🛠️  Tools Versions"
+                        echo "  Tools Versions"
                         echo "====================================="
                         java -version
                         mvn -version
@@ -83,7 +83,7 @@ pipeline {
             }
         }
 
-        stage('🧪 Unit Tests') {
+        stage(' Unit Tests') {
             steps {
                 container('maven') {
                     sh '''
