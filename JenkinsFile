@@ -17,8 +17,8 @@ pipeline {
         SONAR_TOKEN = credentials('sonarqube-token')
         GIT_CREDENTIALS = credentials('git-credentials')
 
-        // URLs
-        SONAR_HOST_URL = "http://localhost:7000/"
+        // URLs - CHANGEMENT ICI : utilisez l'IP gateway Docker au lieu de localhost
+        SONAR_HOST_URL = "http://172.17.0.1:7000"
         GIT_MANIFESTS_REPO = "https://github.com/rijalseydinaissa/k8s-manifests.git"
         GIT_SOURCE_REPO = "https://github.com/rijalseydinaissa/deploy_java_version11.git"
 
