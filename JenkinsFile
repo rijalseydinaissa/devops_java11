@@ -1,10 +1,10 @@
 pipeline {
    agent {
-           docker{
-               image 'issadiol/maven-jenkins-agent:latest'
-               args '-v /var/run/docker.sock:/var/run/docker.sock -v $HOME/.m2:/home/jenkins/.m2'
-           }
+       docker{
+           image 'issadiol/maven-jenkins-agent:latest'
+           args '-v /var/run/docker.sock:/var/run/docker.sock -v $HOME/.m2:/home/jenkins/.m2 --dns 8.8.8.8 --dns 8.8.4.4'
        }
+   }
 
     environment {
         // Configuration du projet
@@ -19,7 +19,7 @@ pipeline {
 
         // URLs
         SONAR_HOST_URL = "http://localhost:7000/"
-        GIT_MANIFESTS_REPO = "https://github.com/rijalseydinaissa/k8s-manifests.gitt"
+        GIT_MANIFESTS_REPO = "https://github.com/rijalseydinaissa/k8s-manifests.git"
         GIT_SOURCE_REPO = "https://github.com/rijalseydinaissa/deploy_java_version11.git"
 
         // Namespaces K8s
