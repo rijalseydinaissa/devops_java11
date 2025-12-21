@@ -93,21 +93,38 @@ pipeline {
             }
         }
 
-        stage('✅ Quality Gate') {
-            steps {
-                script {
-                    echo "⏳ Waiting for Quality Gate result..."
-                    timeout(time: 5, unit: 'MINUTES') {
-                        def qg = waitForQualityGate()
-                        if (qg.status != 'OK') {
-                            error "❌ Quality Gate failed: ${qg.status}"
-                        } else {
-                            echo "✅ Quality Gate passed successfully!"
-                        }
-                    }
-                }
-            }
-        }
+       stage('✅ Quality Gate') {
+           steps {
+               script {
+                   echo "⏳ Waiting for Quality Gate result..."
+                   timeout(time: 5, unit: 'MINUTES') {
+                       try {
+                           def qg = waitForQualityGate()
+                           echo "Quality Gate Status: ${qg.status}"
+
+                           if (qg.status != 'OK') {
+                               error "❌ Quality Gate failed: ${qg.status}"
+                           } else {
+                               echo "✅ Quality Gate passed successfully!"
+                           }
+                       } catch (Exception e) {
+                           echo "❌ Quality Gate check failed!"
+                           echo "Error type: ${e.getClass().getName()}"
+                           echo "Error message: ${e.getMessage()}"
+                           echo ""
+                           echo "🔍 Troubleshooting steps:"
+                           echo "1. Verify SonarQube token in Jenkins credentials"
+                           echo "2. Check SonarQube server configuration in Jenkins"
+                           echo "3. Ensure token has correct permissions"
+                           echo "4. Manual check: ${SONAR_HOST_URL}/dashboard?id=${APP_NAME}"
+
+                           // Relancer l'erreur pour arrêter le pipeline
+                           throw e
+                       }
+                   }
+               }
+           }
+       }
 
         stage('📦 Maven Package') {
             steps {
