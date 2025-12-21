@@ -235,42 +235,41 @@ pipeline {
         }
     }
 
-    post {
-        always {
-            container('maven') {
-                sh '''
-                    echo "Cleaning up Docker images..."
-                    docker image prune -f || true
+        post {
+            always {
+                script {
+                    try {
+                        sh '''
+                            echo "🧹 Cleaning up Docker images..."
+                            docker image prune -f || true
+                        '''
+                    } catch (Exception e) {
+                        echo "⚠️ Cleanup failed: ${e.message}"
+                    }
+                }
+                cleanWs()
+            }
+            success {
+                echo '''
+                ╔════════════════════════════════════════════╗
+                ║                                            ║
+                ║     ✅ PIPELINE EXECUTED SUCCESSFULLY!     ║
+                ║                                            ║
+                ║       Application deployed to Kubernetes     ║
+                ║                                            ║
+                ╚════════════════════════════════════════════╝
                 '''
             }
-            cleanWs()
+            failure {
+                echo '''
+                ╔════════════════════════════════════════════╗
+                ║                                            ║
+                ║         ❌ PIPELINE FAILED!                ║
+                ║                                            ║
+                ║  Please check the logs above for details  ║
+                ║                                            ║
+                ╚════════════════════════════════════════════╝
+                '''
+            }
         }
-        success {
-            echo '''
-            ╔════════════════════════════════════════════╗
-            ║                                            ║
-            ║     ✅ PIPELINE EXECUTED SUCCESSFULLY!     ║
-            ║                                            ║
-            ║       Application deployed to Kubernetes     ║
-            ║       Image: ${DOCKER_IMAGE}:${DOCKER_TAG}   ║
-            ║       Namespace: ${K8S_NAMESPACE}            ║
-            ║                                            ║
-            ╚════════════════════════════════════════════╝
-            '''
-        }
-        failure {
-            echo '''
-            ╔════════════════════════════════════════════╗
-            ║                                            ║
-            ║         ❌ PIPELINE FAILED!                ║
-            ║                                            ║
-            ║  Please check the logs above for details  ║
-            ║                                            ║
-            ╚════════════════════════════════════════════╝
-            '''
-        }
-        unstable {
-            echo '⚠️  Pipeline completed with warnings'
-        }
-    }
 }
