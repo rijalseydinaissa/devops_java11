@@ -1,5 +1,10 @@
 pipeline {
-    agent any
+    agent {
+        docker{
+            image 'issadiol/maven-jenkins-agent:latest'
+            args '-v /var/run/docker.sock:/var/run/docker.sock -v $HOME/.m2:/home/jenkins/.m2'
+        }
+    }
 
     tools {
         maven 'Maven-3.9.0'
@@ -10,7 +15,10 @@ pipeline {
         DOCKER_IMAGE = "demo-springboot"
         DOCKERHUB_REPO = "issadiol/demo-springboot" // ton repo DockerHub
         RENDER_DEPLOY_HOOK = "https://api.render.com/deploy/srv-d378rfmr433s73ehe220?key=aJVRFosBwPE" // ton deploy hook
+       // SONAR_URL=""
     }
+
+    //dans sonar voici la variable sonarqube
 
     stages {
         stage('Checkout') {
@@ -24,6 +32,8 @@ pipeline {
                 sh 'mvn clean package -DskipTests'
             }
         }
+        
+    //jai creer le variable docker-cred dans jenkins
 
         stage('Docker Build') {
             steps {
