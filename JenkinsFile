@@ -1,10 +1,10 @@
 pipeline {
-   agent {
-       docker{
-           image 'issadiol/maven-jenkins-agent:latest'
-           args '-v /var/run/docker.sock:/var/run/docker.sock -v $HOME/.m2:/home/jenkins/.m2 --dns 8.8.8.8 --dns 8.8.4.4'
-       }
-   }
+    agent {
+        docker {
+            image 'issadiol/maven-jenkins-agent:latest'
+            args '-v /var/run/docker.sock:/var/run/docker.sock --dns 8.8.8.8 --dns 8.8.4.4'
+        }
+    }
 
     environment {
         // Configuration du projet
@@ -34,242 +34,219 @@ pipeline {
     }
 
     stages {
-        stage(' Environment Info') {
+        stage('🔍 Environment Info') {
             steps {
-                container('maven') {
+                sh '''
+                    echo "====================================="
+                    echo "Build Information"
+                    echo "====================================="
+                    echo "Build Number: ${BUILD_NUMBER}"
+                    echo "Build ID: ${BUILD_ID}"
+                    echo "Job Name: ${JOB_NAME}"
+                    echo "Workspace: ${WORKSPACE}"
+                    echo ""
+                    echo "====================================="
+                    echo "🔧 Tools Versions"
+                    echo "====================================="
+                    java -version
+                    mvn -version
+                    docker --version
+                    git --version
+                    echo "====================================="
+                '''
+            }
+        }
+
+        stage('📥 Git Checkout') {
+            steps {
+                script {
+                    echo "Cloning source code repository..."
+                    git branch: 'main',
+                        url: "${GIT_SOURCE_REPO}",
+                        credentialsId: 'git-credentials'
+                }
+            }
+        }
+
+        stage('🔨 Maven Compile') {
+            steps {
+                sh '''
+                    echo "Compiling the project..."
+                    mvn clean compile
+                '''
+            }
+        }
+
+        stage('📊 SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube') {
                     sh '''
-                        echo "====================================="
-                        echo "Build Information"
-                        echo "====================================="
-                        echo "Build Number: ${BUILD_NUMBER}"
-                        echo "Build ID: ${BUILD_ID}"
-                        echo "Job Name: ${JOB_NAME}"
-                        echo "Workspace: ${WORKSPACE}"
-                        echo ""
-                        echo "====================================="
-                        echo "  Tools Versions"
-                        echo "====================================="
-                        java -version
-                        mvn -version
-                        docker --version
-                        git --version
-                        echo "====================================="
+                        echo "Running SonarQube analysis..."
+                        mvn sonar:sonar \
+                          -Dsonar.projectKey=${APP_NAME} \
+                          -Dsonar.projectName=${APP_NAME} \
+                          -Dsonar.host.url=${SONAR_HOST_URL} \
+                          -Dsonar.token=${SONAR_TOKEN} \
+                          -Dsonar.java.binaries=target/classes
                     '''
                 }
             }
         }
 
-        stage(' Git Checkout') {
+        stage('✅ Quality Gate') {
             steps {
-                container('maven') {
-                    script {
-                        echo "Cloning source code repository..."
-                        git branch: 'main',
-                            url: "${GIT_SOURCE_REPO}",
-                            credentialsId: 'git-credentials'
-                    }
-                }
-            }
-        }
-
-        stage(' Maven Compile') {
-            steps {
-                container('maven') {
-                    sh '''
-                        echo "Compiling the project..."
-                        mvn clean compile
-                    '''
-                }
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                container('maven') {
-                    withSonarQubeEnv('SonarQube') {
-                        sh '''
-                            echo "Running SonarQube analysis..."
-                            mvn sonar:sonar \
-                              -Dsonar.projectKey=${APP_NAME} \
-                              -Dsonar.projectName=${APP_NAME} \
-                              -Dsonar.host.url=${SONAR_HOST_URL} \
-                              -Dsonar.token=${SONAR_TOKEN} \
-                              -Dsonar.java.binaries=target/classes
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('Quality Gate') {
-            steps {
-                container('maven') {
-                    script {
-                        echo " Waiting for Quality Gate result..."
-                        timeout(time: 5, unit: 'MINUTES') {
-                            def qg = waitForQualityGate()
-                            if (qg.status != 'OK') {
-                                error "❌ Quality Gate failed: ${qg.status}"
-                            } else {
-                                echo "✅ Quality Gate passed successfully!"
-                            }
+                script {
+                    echo "⏳ Waiting for Quality Gate result..."
+                    timeout(time: 5, unit: 'MINUTES') {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            error "❌ Quality Gate failed: ${qg.status}"
+                        } else {
+                            echo "✅ Quality Gate passed successfully!"
                         }
                     }
                 }
             }
         }
 
-        stage(' Maven Package') {
+        stage('📦 Maven Package') {
             steps {
-                container('maven') {
-                    sh '''
-                        echo " Building JAR package..."
-                        mvn clean package -DskipTests
-                        echo "✅ JAR created successfully!"
-                        ls -lh target/*.jar
-                    '''
+                sh '''
+                    echo "📦 Building JAR package..."
+                    mvn clean package -DskipTests
+                    echo "✅ JAR created successfully!"
+                    ls -lh target/*.jar
+                '''
+            }
+        }
+
+        stage('🐳 Build Docker Image') {
+            steps {
+                script {
+                    echo "🐳 Building Docker image..."
+                    sh """
+                        docker build \
+                          -t ${DOCKER_IMAGE}:${DOCKER_TAG} \
+                          -t ${DOCKER_IMAGE}:latest \
+                          --build-arg JAR_FILE=target/*.jar \
+                          .
+
+                        echo "✅ Docker image built successfully!"
+                        docker images | grep ${APP_NAME}
+                    """
                 }
             }
         }
 
-        stage(' Build Docker Image') {
+        stage('🚀 Docker Login & Push') {
             steps {
-                container('maven') {
-                    script {
-                        echo " Building Docker image..."
-                        sh """
-                            docker build \
-                              -t ${DOCKER_IMAGE}:${DOCKER_TAG} \
-                              -t ${DOCKER_IMAGE}:latest \
-                              --build-arg JAR_FILE=target/*.jar \
-                              .
+                script {
+                    echo "🔐 Logging into DockerHub..."
+                    sh """
+                        echo ${DOCKER_CREDENTIALS_PSW} | docker login -u ${DOCKER_CREDENTIALS_USR} --password-stdin
 
-                            echo "✅ Docker image built successfully!"
-                            docker images | grep ${APP_NAME}
-                        """
-                    }
+                        echo "🚀 Pushing Docker images..."
+                        docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
+                        docker push ${DOCKER_IMAGE}:latest
+
+                        echo "✅ Images pushed successfully!"
+                        docker logout
+                    """
                 }
             }
         }
 
-        stage(' Docker Login & Push') {
+        stage('📝 Update Kubernetes Manifests') {
             steps {
-                container('maven') {
-                    script {
-                        echo " Logging into DockerHub..."
-                        sh """
-                            echo ${DOCKER_CREDENTIALS_PSW} | docker login -u ${DOCKER_CREDENTIALS_USR} --password-stdin
+                script {
+                    echo "📝 Updating Kubernetes manifests with new image..."
+                    sh """
+                        # Configuration Git
+                        git config --global user.email "jenkins@ci.pipeline.com"
+                        git config --global user.name "Jenkins CI/CD"
 
-                            echo " Pushing Docker images..."
-                            docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
-                            docker push ${DOCKER_IMAGE}:latest
+                        # Cloner le repo des manifests
+                        rm -rf k8s-manifests
+                        git clone ${GIT_MANIFESTS_REPO}
+                        cd k8s-manifests
 
-                            echo "✅ Images pushed successfully!"
-                            docker logout
-                        """
-                    }
+                        # Mettre à jour l'image dans deployment.yaml
+                        sed -i "s|image: ${DOCKER_IMAGE}:.*|image: ${DOCKER_IMAGE}:${DOCKER_TAG}|g" deployment.yaml
+
+                        # Vérifier le changement
+                        echo "📋 Changes made:"
+                        git diff deployment.yaml
+
+                        # Commit et push
+                        git add deployment.yaml
+                        git commit -m "Update image to ${DOCKER_IMAGE}:${DOCKER_TAG} - Build #${BUILD_NUMBER}" || echo "No changes to commit"
+                        git push https://${GIT_CREDENTIALS_USR}:${GIT_CREDENTIALS_PSW}@github.com/rijalseydinaissa/k8s-manifests.git main
+
+                        echo "✅ Manifests updated successfully!"
+                    """
                 }
             }
         }
 
-        stage('Update Kubernetes Manifests') {
+        stage('🔄 Trigger ArgoCD Sync') {
             steps {
-                container('maven') {
-                    script {
-                        echo "Updating Kubernetes manifests with new image..."
-                        sh """
-                            # Configuration Git
-                            git config --global user.email "jenkins@ci.pipeline.com"
-                            git config --global user.name "Jenkins CI/CD"
-
-                            # Cloner le repo des manifests
-                            rm -rf k8s-manifests
-                            git clone ${GIT_MANIFESTS_REPO}
-                            cd k8s-manifests
-
-                            # Mettre à jour l'image dans deployment.yaml
-                            sed -i "s|image: ${DOCKER_IMAGE}:.*|image: ${DOCKER_IMAGE}:${DOCKER_TAG}|g" deployment.yaml
-
-                            # Vérifier le changement
-                            echo " Changes made:"
-                            git diff deployment.yaml
-
-                            # Commit et push
-                            git add deployment.yaml
-                            git commit -m "Update image to ${DOCKER_IMAGE}:${DOCKER_TAG} - Build #${BUILD_NUMBER}" || echo "No changes to commit"
-                            git push https://${GIT_CREDENTIALS_USR}:${GIT_CREDENTIALS_PSW}@github.com/rijalseydinaissa/k8s-manifests.git main
-
-                            echo "✅ Manifests updated successfully!"
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('Trigger ArgoCD Sync') {
-            steps {
-                container('maven') {
-                    script {
-                        echo "ArgoCD will automatically detect and sync the changes..."
-                        echo "Application: ${APP_NAME}"
-                        echo "Namespace: ${K8S_NAMESPACE}"
-                        echo "Image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
-                        echo ""
-                        echo "✅ GitOps process initiated!"
-                        echo " Monitor deployment in ArgoCD UI"
-                    }
+                script {
+                    echo "🔄 ArgoCD will automatically detect and sync the changes..."
+                    echo "Application: ${APP_NAME}"
+                    echo "Namespace: ${K8S_NAMESPACE}"
+                    echo "Image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                    echo ""
+                    echo "✅ GitOps process initiated!"
+                    echo "👀 Monitor deployment in ArgoCD UI"
                 }
             }
         }
 
         stage('✅ Deployment Verification') {
             steps {
-                container('maven') {
-                    script {
-                        echo " Waiting for deployment to stabilize..."
-                        sleep(time: 30, unit: 'SECONDS')
-                        echo "✅ Deployment completed! Check ArgoCD for status."
-                    }
+                script {
+                    echo "⏳ Waiting for deployment to stabilize..."
+                    sleep(time: 30, unit: 'SECONDS')
+                    echo "✅ Deployment completed! Check ArgoCD for status."
                 }
             }
         }
     }
 
-        post {
-            always {
-                script {
-                    try {
-                        sh '''
-                            echo "🧹 Cleaning up Docker images..."
-                            docker image prune -f || true
-                        '''
-                    } catch (Exception e) {
-                        echo "⚠️ Cleanup failed: ${e.message}"
-                    }
+    post {
+        always {
+            script {
+                try {
+                    sh '''
+                        echo "🧹 Cleaning up Docker images..."
+                        docker image prune -f || true
+                    '''
+                } catch (Exception e) {
+                    echo "⚠️ Cleanup failed: ${e.message}"
                 }
-                cleanWs()
-            }
-            success {
-                echo '''
-                ╔════════════════════════════════════════════╗
-                ║                                            ║
-                ║     ✅ PIPELINE EXECUTED SUCCESSFULLY!     ║
-                ║                                            ║
-                ║       Application deployed to Kubernetes     ║
-                ║                                            ║
-                ╚════════════════════════════════════════════╝
-                '''
-            }
-            failure {
-                echo '''
-                ╔════════════════════════════════════════════╗
-                ║                                            ║
-                ║         ❌ PIPELINE FAILED!                ║
-                ║                                            ║
-                ║  Please check the logs above for details  ║
-                ║                                            ║
-                ╚════════════════════════════════════════════╝
-                '''
             }
         }
+        success {
+            echo '''
+            ╔════════════════════════════════════════════╗
+            ║                                            ║
+            ║     ✅ PIPELINE EXECUTED SUCCESSFULLY!     ║
+            ║                                            ║
+            ║       Application deployed to Kubernetes     ║
+            ║                                            ║
+            ╚════════════════════════════════════════════╝
+            '''
+        }
+        failure {
+            echo '''
+            ╔════════════════════════════════════════════╗
+            ║                                            ║
+            ║         ❌ PIPELINE FAILED!                ║
+            ║                                            ║
+            ║  Please check the logs above for details  ║
+            ║                                            ║
+            ╚════════════════════════════════════════════╝
+            '''
+        }
+    }
 }
